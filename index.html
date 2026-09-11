@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Painel de Locações · Airbnb</title>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
+
+<style>
+/* =========================================================================
+   FORMATAÇÃO / IDENTIDADE VISUAL
+   Para aplicar o padrão da empresa no futuro, basta trocar os valores abaixo.
+   ========================================================================= */
+:root{
+  --brand:        #1f5480;   /* cor principal */
+  --brand-soft:   #eaf1f7;   /* fundo suave da cor principal */
+  --accent:       #b4571f;   /* cor de destaque (2a cidade / diferenças) */
+  --bg:           #f6f7f9;   /* fundo da página */
+  --surface:      #ffffff;   /* fundo dos cartões */
+  --text:         #1c2530;   /* texto principal */
+  --muted:        #6b7683;   /* texto secundário */
+  --border:       #e0e4ea;   /* linhas e bordas */
+  --ok:           #2f7d5c;
+  --warn:         #b4571f;
+  --radius:       10px;
+  --gap:          16px;
+  --font:         "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+
+  /* escala de cores do mapa (do mais barato ao mais caro) */
+  --sc1:#e8f0f7; --sc2:#c5dbeb; --sc3:#96c1de; --sc4:#5f9fca; --sc5:#3b7cad; --sc6:#1f5480;
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;line-height:1.45}
+button,input,select{font-family:inherit;font-size:14px;color:inherit}
+h1,h2,h3{margin:0;font-weight:600}
+a{color:var(--brand)}
+
+/* ---------- cabeçalho ---------- */
+header{background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:900}
+.hdr{max-width:1440px;margin:0 auto;padding:12px 20px;display:flex;align-items:center;gap:var(--gap);flex-wrap:wrap}
+.hdr h1{font-size:17px;letter-spacing:.2px}
+.hdr .sub{color:var(--muted);font-size:12px}
+.hdr-right{margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.money{display:flex;align-items:center;gap:6px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:5px 8px}
+.money label{font-size:12px;color:var(--muted)}
+.money select,.money input{border:1px solid var(--border);border-radius:6px;padding:4px 6px;background:#fff}
+.money input{width:74px;text-align:right}
+.btn{background:var(--brand);color:#fff;border:none;border-radius:var(--radius);padding:9px 16px;cursor:pointer;font-weight:600}
+.btn:hover{filter:brightness(1.08)}
+.btn.ghost{background:#fff;color:var(--brand);border:1px solid var(--border);font-weight:500}
+.btn.small{padding:5px 10px;font-size:13px;font-weight:500}
+.btn.danger{background:#fff;color:#a33;border:1px solid var(--border)}
+
+/* ---------- layout ---------- */
+main{max-width:1440px;margin:0 auto;padding:var(--gap) 20px 30px}
+.tabs{display:flex;gap:4px;margin-bottom:var(--gap);border-bottom:1px solid var(--border);flex-wrap:wrap}
+.tab{padding:9px 16px;cursor:pointer;border:1px solid transparent;border-bottom:none;border-radius:8px 8px 0 0;color:var(--muted);font-weight:500;background:none}
+.tab.active{background:var(--surface);border-color:var(--border);color:var(--brand)}
+.panel{display:none}
+.panel.active{display:block}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:var(--gap)}
+.card h3{font-size:14px;margin-bottom:12px}
+.card h3 span{font-weight:400;color:var(--muted);font-size:12px}
+
+/* ---------- filtros ---------- */
+.filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;align-items:end}
+.f label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
+.f select,.f input{width:100%;padding:7px 8px;border:1px solid var(--border);border-radius:7px;background:#fff}
+.range{display:flex;gap:6px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border);background:#fff;border-radius:999px;padding:5px 11px;cursor:pointer;user-select:none}
+.chip.on{background:var(--brand-soft);border-color:var(--brand);color:var(--brand);font-weight:600}
+.chip .x{color:var(--muted);font-size:15px;line-height:1;padding:0 2px;border-radius:50%}
+.chip .x:hover{color:#a33}
+
+/* ---------- KPIs ---------- */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px}
+.kpi .lab{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.kpi .val{font-size:22px;font-weight:600;margin-top:4px}
+.kpi .alt{font-size:12px;color:var(--muted);margin-top:2px}
+
+/* ---------- tabelas ---------- */
+.tw{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:8px 10px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+thead th{background:var(--bg);color:var(--muted);font-weight:600;font-size:12px;position:sticky;top:0}
+tbody tr:hover{background:var(--brand-soft)}
+.pos{color:var(--warn);font-weight:600}
+.neg{color:var(--ok);font-weight:600}
+
+/* ---------- gráficos ---------- */
+.charts{display:grid;grid-template-columns:1fr 1fr;gap:var(--gap)}
+@media(max-width:980px){.charts{grid-template-columns:1fr}}
+.bar-row{display:grid;grid-template-columns:150px 1fr 90px;gap:8px;align-items:center;margin-bottom:5px;font-size:12px}
+.bar-row .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
+.bar-track{background:var(--bg);border-radius:4px;height:16px;overflow:hidden}
+.bar-fill{height:100%;background:var(--brand);border-radius:4px}
+.bar-row .vl{text-align:right;font-variant-numeric:tabular-nums}
+
+/* ---------- mapa ---------- */
+#map{height:620px;border-radius:var(--radius);border:1px solid var(--border);z-index:1}
+.maptools{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.maptools label{display:flex;align-items:center;gap:6px;cursor:pointer}
+.legend{display:flex;align-items:center;gap:6px;margin-left:auto;font-size:12px;color:var(--muted)}
+.legend i{width:22px;height:12px;display:inline-block;border-radius:2px}
+.leaflet-tooltip.tt{font-family:var(--font);font-size:12px;line-height:1.4;padding:8px 10px;border-radius:8px;border:1px solid var(--border);box-shadow:0 4px 14px rgba(0,0,0,.12)}
+.tt b{display:block;font-size:13px;margin-bottom:3px}
+.tt .p1{font-size:15px;font-weight:700;color:var(--brand)}
+.tt .p2{color:var(--muted)}
+
+/* ---------- modal / estado vazio ---------- */
+.overlay{position:fixed;inset:0;background:rgba(20,26,34,.45);display:none;align-items:center;justify-content:center;z-index:2000;padding:20px}
+.overlay.on{display:flex}
+.modal{background:#fff;border-radius:12px;padding:22px;width:100%;max-width:440px;box-shadow:0 18px 50px rgba(0,0,0,.25)}
+.modal h3{font-size:16px;margin-bottom:4px}
+.modal p{color:var(--muted);font-size:13px;margin:0 0 16px}
+.modal .f{margin-bottom:12px}
+.modal .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
+.empty{text-align:center;padding:70px 20px;color:var(--muted)}
+.empty h2{font-size:19px;color:var(--text);margin-bottom:8px}
+.empty p{max-width:520px;margin:0 auto 18px}
+.status{position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:var(--text);color:#fff;padding:10px 18px;border-radius:999px;z-index:2500;display:none;font-size:13px}
+.status.on{display:block}
+
+footer{border-top:1px solid var(--border);background:var(--surface);text-align:center;padding:16px;color:var(--muted);font-size:13px}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hdr">
+    <div>
+      <h1>Painel de Locações · Airbnb</h1>
+      <div class="sub" id="hdrSub">Nenhuma cidade importada</div>
+    </div>
+    <div class="hdr-right">
+      <div class="money">
+        <label for="curSel">Exibir em</label>
+        <select id="curSel">
+          <option value="BRL">R$ (real)</option>
+          <option value="USD">US$ (dólar)</option>
+        </select>
+        <label for="rateInp">1 US$ =</label>
+        <input id="rateInp" type="number" step="0.01" min="0.01" value="5.40">
+      </div>
+      <button class="btn" id="importBtn">⬆ Importar / atualizar cidade</button>
+      <input type="file" id="fileInp" accept=".csv,text/csv" multiple class="hidden">
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- estado vazio -->
+  <div id="emptyState" class="empty">
+    <h2>Comece importando uma cidade</h2>
+    <p>Clique em <b>Importar / atualizar cidade</b>, no canto superior direito, e selecione a tabela
+       (.csv) da cidade. Você pode enviar mais de um arquivo de uma vez. Ao subir novamente uma cidade
+       já existente, os dados dela são substituídos automaticamente.</p>
+    <button class="btn" onclick="document.getElementById('fileInp').click()">Selecionar arquivo</button>
+  </div>
+
+  <div id="app" class="hidden">
+    <!-- filtros -->
+    <div class="card">
+      <h3>Filtros</h3>
+      <div class="chips" id="cityChips"></div>
+      <div class="filters">
+        <div class="f"><label>Bairro</label><select id="fNb"><option value="">Todos</option></select></div>
+        <div class="f"><label>Tipo de imóvel</label><select id="fRt"><option value="">Todos</option></select></div>
+        <div class="f"><label>Preço da diária (na moeda exibida)</label>
+          <div class="range"><input id="fPmin" type="number" placeholder="mín"><input id="fPmax" type="number" placeholder="máx"></div>
+        </div>
+        <div class="f"><label>Mínimo de noites (até)</label><input id="fMn" type="number" placeholder="sem limite"></div>
+        <div class="f"><label>Disponibilidade no ano (mín. dias)</label><input id="fAv" type="number" placeholder="0"></div>
+        <div class="f"><label>Avaliações (mín.)</label><input id="fNr" type="number" placeholder="0"></div>
+        <div class="f"><button class="btn ghost" id="clearBtn" style="width:100%">Limpar filtros</button></div>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" data-p="ov">Visão geral</button>
+      <button class="tab" data-p="map">Mapa</button>
+      <button class="tab" data-p="cmp">Comparativo lado a lado</button>
+      <button class="tab" data-p="nb">Bairros</button>
+    </div>
+
+    <!-- VISÃO GERAL -->
+    <section class="panel active" id="p-ov">
+      <div class="kpis" id="kpis"></div>
+      <div class="charts" style="margin-top:var(--gap)">
+        <div class="card"><h3>Distribuição do preço da diária <span id="histSub"></span></h3><div id="hist"></div></div>
+        <div class="card"><h3>Preço médio por tipo de imóvel</h3><div id="byType"></div></div>
+      </div>
+    </section>
+
+    <!-- MAPA -->
+    <section class="panel" id="p-map">
+      <div class="card">
+        <div class="maptools">
+          <label><input type="checkbox" id="lyGrid" checked> Malha de preços</label>
+          <label><input type="checkbox" id="lyHeat"> Mapa de calor</label>
+          <label><input type="checkbox" id="lyPts" checked> Pontos</label>
+          <label>Centralizar em
+            <select id="mapCity" style="padding:4px 6px;border:1px solid var(--border);border-radius:6px"></select>
+          </label>
+          <label>Detalhe da malha
+            <select id="gridRes" style="padding:4px 6px;border:1px solid var(--border);border-radius:6px">
+              <option value="26">Baixo</option><option value="40" selected>Médio</option><option value="60">Alto</option>
+            </select>
+          </label>
+          <div class="legend" id="legend"></div>
+        </div>
+        <div id="map"></div>
+        <div style="color:var(--muted);font-size:12px;margin-top:8px" id="mapNote"></div>
+      </div>
+    </section>
+
+    <!-- COMPARATIVO -->
+    <section class="panel" id="p-cmp">
+      <div class="card">
+        <h3>Comparativo lado a lado <span>— valores respeitam os filtros aplicados</span></h3>
+        <div class="tw" id="cmpTable"></div>
+      </div>
+      <div class="card"><h3>Preço médio por tipo de imóvel, por cidade</h3><div class="tw" id="cmpType"></div></div>
+    </section>
+
+    <!-- BAIRROS -->
+    <section class="panel" id="p-nb">
+      <div class="card">
+        <h3>Bairros <span>— ordenados por preço médio (mín. 5 anúncios)</span></h3>
+        <div class="tw" id="nbTable"></div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<footer>Feito com ❤️ por Thalita, Versão 1.0</footer>
+
+<!-- modal de importação -->
+<div class="overlay" id="ovImport">
+  <div class="modal">
+    <h3 id="impTitle">Importar cidade</h3>
+    <p id="impDesc"></p>
+    <div class="f"><label style="font-size:12px;color:var(--muted)">Nome da cidade</label>
+      <input id="impName" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:7px"></div>
+    <div class="f"><label style="font-size:12px;color:var(--muted)">Moeda dos preços deste arquivo</label>
+      <select id="impCur" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:7px">
+        <option value="BRL">R$ — real brasileiro</option>
+        <option value="USD">US$ — dólar americano</option>
+      </select></div>
+    <div class="acts">
+      <button class="btn ghost" id="impCancel">Cancelar</button>
+      <button class="btn" id="impOk">Salvar cidade</button>
+    </div>
+  </div>
+</div>
+
+<!-- modal de confirmação -->
+<div class="overlay" id="ovConfirm">
+  <div class="modal">
+    <h3 id="cfTitle">Confirmar</h3>
+    <p id="cfDesc"></p>
+    <div class="acts">
+      <button class="btn ghost" id="cfNo">Cancelar</button>
+      <button class="btn danger" id="cfYes">Remover</button>
+    </div>
+  </div>
+</div>
+
+<div class="status" id="status"></div>
+
+<script>
+"use strict";
+
+/* =========================================================================
+   1. ESTADO
+   ========================================================================= */
+var CITIES = [];              // [{id,name,currency,rows:[...],importedAt}]
+var SEL = {};                 // cidades selecionadas {id:true}
+var DISPLAY = "BRL";          // moeda de exibição
+var RATE = 5.40;              // 1 US$ = RATE R$
+var map=null, gridLayer=null, heatLayer=null, ptsLayer=null, legendBreaks=[];
+var SCALE = ["--sc1","--sc2","--sc3","--sc4","--sc5","--sc6"].map(function(v){
+  return getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+});
+
+var $ = function(id){ return document.getElementById(id); };
+function status(msg,ms){ var s=$("status"); s.textContent=msg; s.classList.add("on");
+  if(ms!==0){ clearTimeout(status._t); status._t=setTimeout(function(){s.classList.remove("on");}, ms||2200);} }
+function hideStatus(){ $("status").classList.remove("on"); }
+
+/* =========================================================================
+   2. LEITURA DE CSV (sem bibliotecas externas)
+   ========================================================================= */
+function parseCSV(text){
+  if(text.charCodeAt(0)===0xFEFF) text=text.slice(1);
+  var delim = detectDelim(text);
+  var rows=[], row=[], field="", i=0, n=text.length, q=false, c;
+  for(;i<n;i++){
+    c=text[i];
+    if(q){
+      if(c==='"'){ if(text[i+1]==='"'){field+='"';i++;} else q=false; }
+      else field+=c;
+    } else {
+      if(c==='"') q=true;
+      else if(c===delim){ row.push(field); field=""; }
+      else if(c==='\n'){ row.push(field); field=""; rows.push(row); row=[]; }
+      else if(c==='\r'){ /* ignora */ }
+      else field+=c;
+    }
+  }
+  if(field.length||row.length){ row.push(field); rows.push(row); }
+  return rows;
+}
+function detectDelim(t){
+  var head=t.slice(0,4000), best=",", bc=-1;
+  [",",";","\t","|"].forEach(function(d){
+    var c=head.split(d).length; if(c>bc){bc=c;best=d;}
+  });
+  return best;
+}
+function norm(s){ return String(s||"").toLowerCase().replace(/[^a-z0-9]/g,""); }
+function findCol(header,cands){
+  var h=header.map(norm);
+  for(var k=0;k<cands.length;k++){ var i=h.indexOf(norm(cands[k])); if(i>=0) return i; }
+  for(var k2=0;k2<cands.length;k2++){
+    var t=norm(cands[k2]);
+    for(var j=0;j<h.length;j++) if(h[j].indexOf(t)>=0) return j;
+  }
+  return -1;
+}
+function parseNum(v){
+  if(v==null) return NaN;
+  var s=String(v).trim(); if(!s) return NaN;
+  s=s.replace(/[^0-9.,\-]/g,"");
+  if(!s) return NaN;
+  var lc=s.lastIndexOf(","), ld=s.lastIndexOf(".");
+  if(lc>-1&&ld>-1){ if(lc>ld){ s=s.replace(/\./g,"").replace(",","."); } else { s=s.replace(/,/g,""); } }
+  else if(lc>-1){ // só vírgula: decimal se tiver 1-2 casas no fim
+    s = /,\d{1,2}$/.test(s) ? s.replace(",",".") : s.replace(/,/g,"");
+  }
+  var f=parseFloat(s);
+  return isFinite(f)?f:NaN;
+}
+
+/* transforma o CSV bruto em registros enxutos */
+function buildRows(matrix){
+  if(!matrix.length) throw new Error("Arquivo vazio.");
+  var header=matrix[0];
+  var iLa=findCol(header,["latitude","lat"]),
+      iLo=findCol(header,["longitude","long","lng","lon"]),
+      iP =findCol(header,["price","preco","preço","valor","daily_price"]),
+      iRt=findCol(header,["room_type","roomtype","tipo","tipo_imovel"]),
+      iNb=findCol(header,["neighbourhood_cleansed","neighbourhood","neighborhood","bairro"]),
+      iNg=findCol(header,["neighbourhood_group","neighborhood_group","regiao","região","zona"]),
+      iMn=findCol(header,["minimum_nights","minimonoites"]),
+      iAv=findCol(header,["availability_365","availability","disponibilidade"]),
+      iNr=findCol(header,["number_of_reviews","reviews","avaliacoes","avaliações"]),
+      iRp=findCol(header,["reviews_per_month"]),
+      iNm=findCol(header,["name","nome","titulo","título","listing_name"]);
+  if(iLa<0||iLo<0) throw new Error("Não encontrei as colunas de latitude e longitude.");
+  if(iP<0) throw new Error("Não encontrei a coluna de preço.");
+  var out=[];
+  for(var r=1;r<matrix.length;r++){
+    var m=matrix[r]; if(!m||m.length<2) continue;
+    var la=parseFloat(m[iLa]), lo=parseFloat(m[iLo]), p=parseNum(m[iP]);
+    if(!isFinite(la)||!isFinite(lo)||Math.abs(la)>90||Math.abs(lo)>180) continue;
+    if(!isFinite(p)||p<=0) continue;
+    out.push({
+      la:+la.toFixed(5), lo:+lo.toFixed(5), p:p,
+      rt: iRt>=0 ? (m[iRt]||"Não informado").trim() : "Não informado",
+      nb: iNb>=0 ? (m[iNb]||"Não informado").trim() : "Não informado",
+      ng: iNg>=0 ? (m[iNg]||"").trim() : "",
+      mn: iMn>=0 ? (parseNum(m[iMn])||0) : 0,
+      av: iAv>=0 ? (parseNum(m[iAv])||0) : 0,
+      nr: iNr>=0 ? (parseNum(m[iNr])||0) : 0,
+      rp: iRp>=0 ? (parseNum(m[iRp])||0) : 0,
+      nm: iNm>=0 ? String(m[iNm]||"").slice(0,70) : ""
+    });
+  }
+  if(!out.length) throw new Error("Nenhuma linha válida encontrada (preço e coordenadas).");
+  return out;
+}
+
+/* =========================================================================
+   3. ARMAZENAMENTO (IndexedDB — guarda a última importação no navegador)
+   ========================================================================= */
+var DB=null;
+function openDB(){
+  return new Promise(function(res){
+    try{
+    if(!window.indexedDB) return res(null);
+    var rq=indexedDB.open("airbnb_dashboard",1);
+    rq.onupgradeneeded=function(e){ var db=e.target.result;
+      if(!db.objectStoreNames.contains("cities")) db.createObjectStore("cities",{keyPath:"id"});
+      if(!db.objectStoreNames.contains("prefs"))  db.createObjectStore("prefs",{keyPath:"k"}); };
+    rq.onsuccess=function(e){ DB=e.target.result; res(DB); };
+    rq.onerror=function(){ res(null); };
+    rq.onblocked=function(){ res(null); };
+    }catch(e){ res(null); }
+  });
+}
+function dbPut(store,obj){ return new Promise(function(res){ if(!DB) return res();
+  try{ var t=DB.transaction(store,"readwrite"); t.objectStore(store).put(obj); t.oncomplete=function(){res();}; t.onerror=function(){res();}; }catch(e){res();} }); }
+function dbDel(store,key){ return new Promise(function(res){ if(!DB) return res();
+  try{ var t=DB.transaction(store,"readwrite"); t.objectStore(store).delete(key); t.oncomplete=function(){res();}; }catch(e){res();} }); }
+function dbAll(store){ return new Promise(function(res){ if(!DB) return res([]);
+  try{ var t=DB.transaction(store,"readonly"), rq=t.objectStore(store).getAll();
+       rq.onsuccess=function(){res(rq.result||[]);}; rq.onerror=function(){res([]);}; }catch(e){res([]);} }); }
+
+/* =========================================================================
+   4. MOEDA E FORMATAÇÃO
+   ========================================================================= */
+function toDisplay(price,srcCur){
+  if(srcCur===DISPLAY) return price;
+  return srcCur==="USD" ? price*RATE : price/RATE;
+}
+function fmt(v,cur){
+  if(!isFinite(v)) return "—";
+  var s=(cur||DISPLAY)==="BRL"?"R$":"US$";
+  return s+" "+v.toLocaleString("pt-BR",{minimumFractionDigits:0,maximumFractionDigits:0});
+}
+function fmtInt(v){ return isFinite(v)? Math.round(v).toLocaleString("pt-BR") : "—"; }
+function fmtDec(v,d){ return isFinite(v)? v.toLocaleString("pt-BR",{minimumFractionDigits:d||1,maximumFractionDigits:d||1}) : "—"; }
+function otherCur(){ return DISPLAY==="BRL"?"USD":"BRL"; }
+function convTo(price,srcCur,target){
+  if(srcCur===target) return price;
+  return srcCur==="USD" ? price*RATE : price/RATE;
+}
+
+/* =========================================================================
+   5. FILTROS
+   ========================================================================= */
+function activeCities(){ return CITIES.filter(function(c){ return SEL[c.id]; }); }
+
+function getFilters(){
+  return {
+    nb:$("fNb").value, rt:$("fRt").value,
+    pmin:parseFloat($("fPmin").value), pmax:parseFloat($("fPmax").value),
+    mn:parseFloat($("fMn").value), av:parseFloat($("fAv").value), nr:parseFloat($("fNr").value)
+  };
+}
+/* devolve [{city, rows:[{...row, dp:precoNaMoedaExibida}]}] */
+function filteredByCity(){
+  var f=getFilters();
+  return activeCities().map(function(c){
+    var rows=[];
+    for(var i=0;i<c.rows.length;i++){
+      var r=c.rows[i];
+      if(f.nb && r.nb!==f.nb) continue;
+      if(f.rt && r.rt!==f.rt) continue;
+      var dp=toDisplay(r.p,c.currency);
+      if(isFinite(f.pmin)&&dp<f.pmin) continue;
+      if(isFinite(f.pmax)&&dp>f.pmax) continue;
+      if(isFinite(f.mn)&&r.mn>f.mn) continue;
+      if(isFinite(f.av)&&r.av<f.av) continue;
+      if(isFinite(f.nr)&&r.nr<f.nr) continue;
+      rows.push({r:r,dp:dp});
+    }
+    return {city:c, rows:rows};
+  });
+}
+function flatten(groups){
+  var out=[];
+  groups.forEach(function(g){ g.rows.forEach(function(x){ out.push({r:x.r,dp:x.dp,city:g.city}); }); });
+  return out;
+}
+
+/* =========================================================================
+   6. ESTATÍSTICA
+   ========================================================================= */
+function quantile(sorted,q){
+  if(!sorted.length) return NaN;
+  var pos=(sorted.length-1)*q, b=Math.floor(pos), rest=pos-b;
+  return sorted[b+1]!==undefined ? sorted[b]+rest*(sorted[b+1]-sorted[b]) : sorted[b];
+}
+function stats(items){
+  var v=items.map(function(x){return x.dp;}).sort(function(a,b){return a-b;});
+  var n=v.length, sum=0; for(var i=0;i<n;i++) sum+=v[i];
+  var mean=n?sum/n:NaN, sd=0;
+  for(var j=0;j<n;j++) sd+=Math.pow(v[j]-mean,2);
+  sd = n>1 ? Math.sqrt(sd/(n-1)) : NaN;
+  var avgOf=function(k){ var s=0,c=0; items.forEach(function(x){ var y=x.r[k]; if(isFinite(y)){s+=y;c++;} }); return c?s/c:NaN; };
+  return {
+    n:n, mean:mean, med:quantile(v,.5), p25:quantile(v,.25), p75:quantile(v,.75),
+    p10:quantile(v,.10), p90:quantile(v,.90), min:v[0], max:v[n-1], sd:sd,
+    mn:avgOf("mn"), av:avgOf("av"), nr:avgOf("nr"),
+    entire: n? items.filter(function(x){return /entire|inteir/i.test(x.r.rt);}).length/n*100 : NaN,
+    values:v
+  };
+}
+function groupAgg(items,key){
+  var m={};
+  items.forEach(function(x){
+    var k=x.r[key]||"Não informado";
+    (m[k]=m[k]||[]).push(x);
+  });
+  return Object.keys(m).map(function(k){
+    var s=stats(m[k]); return {key:k,n:s.n,mean:s.mean,med:s.med,min:s.min,max:s.max,p25:s.p25,p75:s.p75};
+  });
+}
+
+/* =========================================================================
+   7. RENDERIZAÇÃO
+   ========================================================================= */
+function render(){
+  if(!CITIES.length){ $("emptyState").classList.remove("hidden"); $("app").classList.add("hidden"); return; }
+  $("emptyState").classList.add("hidden"); $("app").classList.remove("hidden");
+  renderChips(); renderSelectOptions();
+  var groups=filteredByCity(), all=flatten(groups);
+  $("hdrSub").textContent = CITIES.length+" cidade(s) · "+fmtInt(all.length)+" anúncios após filtros";
+  renderKPIs(all,groups);
+  renderHist(all); renderByType(all);
+  renderCompare(groups); renderNeighbourhoods(all,groups);
+  if($("p-map").classList.contains("active")) renderMap(all);
+  else mapDirty=true;
+}
+
+/* ---- chips de cidade ---- */
+function renderChips(){
+  var box=$("cityChips"); box.innerHTML="";
+  CITIES.forEach(function(c){
+    var d=document.createElement("div");
+    d.className="chip"+(SEL[c.id]?" on":"");
+    d.innerHTML="<span>"+esc(c.name)+" · "+fmtInt(c.rows.length)+"</span><span class='x' title='Remover cidade'>×</span>";
+    d.querySelector("span").onclick=function(){ SEL[c.id]=!SEL[c.id]; render(); };
+    d.querySelector(".x").onclick=function(e){ e.stopPropagation(); askRemove(c); };
+    box.appendChild(d);
+  });
+}
+function esc(s){ return String(s).replace(/[&<>"]/g,function(m){return({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[m];}); }
+
+/* ---- opções de bairro / tipo ---- */
+function renderSelectOptions(){
+  var nbs={}, rts={};
+  activeCities().forEach(function(c){ c.rows.forEach(function(r){ nbs[r.nb]=1; rts[r.rt]=1; }); });
+  fillSel($("fNb"), Object.keys(nbs).sort(), "Todos os bairros");
+  fillSel($("fRt"), Object.keys(rts).sort(), "Todos os tipos");
+}
+function fillSel(sel,opts,label){
+  var cur=sel.value;
+  sel.innerHTML="<option value=''>"+label+"</option>"+opts.map(function(o){
+    return "<option value='"+esc(o)+"'>"+esc(o)+"</option>"; }).join("");
+  if(opts.indexOf(cur)>=0) sel.value=cur; else sel.value="";
+}
+
+/* ---- KPIs ---- */
+function renderKPIs(all,groups){
+  var s=stats(all), o=otherCur();
+  function alt(v){ // mesmo valor na outra moeda (média ponderada aproximada não é necessária: convertemos o resultado)
+    if(!isFinite(v)) return "";
+    var x = DISPLAY==="BRL" ? v/RATE : v*RATE;
+    return fmt(x,o);
+  }
+  var cards=[
+    ["Anúncios", fmtInt(s.n), groups.map(function(g){return g.city.name+": "+fmtInt(g.rows.length);}).join(" · ")],
+    ["Preço médio", fmt(s.mean), alt(s.mean)],
+    ["Mediana", fmt(s.med), alt(s.med)],
+    ["25% mais baratos até", fmt(s.p25), alt(s.p25)],
+    ["25% mais caros a partir de", fmt(s.p75), alt(s.p75)],
+    ["Faixa (10%–90%)", fmt(s.p10)+" – "+fmt(s.p90), "mín "+fmt(s.min)+" · máx "+fmt(s.max)],
+    ["Desvio padrão", fmt(s.sd), "dispersão dos preços"],
+    ["Mín. de noites (média)", fmtDec(s.mn), "disponibilidade média: "+fmtDec(s.av,0)+" dias/ano"],
+    ["Imóveis inteiros", fmtDec(s.entire,1)+"%", "avaliações médias: "+fmtDec(s.nr,1)]
+  ];
+  $("kpis").innerHTML=cards.map(function(c){
+    return "<div class='kpi'><div class='lab'>"+esc(c[0])+"</div><div class='val'>"+c[1]+"</div><div class='alt'>"+esc(c[2])+"</div></div>";
+  }).join("");
+}
+
+/* ---- histograma ---- */
+function renderHist(all){
+  var s=stats(all);
+  if(!s.n){ $("hist").innerHTML="<div style='color:var(--muted)'>Sem dados com os filtros atuais.</div>"; $("histSub").textContent=""; return; }
+  var lo=s.p10, hi=s.p90, bins=18, w=(hi-lo)/bins||1, cnt=new Array(bins).fill(0);
+  all.forEach(function(x){ var i=Math.floor((x.dp-lo)/w); if(i<0)i=0; if(i>=bins)i=bins-1; cnt[i]++; });
+  var mx=Math.max.apply(null,cnt);
+  $("histSub").textContent="— entre "+fmt(lo)+" e "+fmt(hi)+" (10% a 90% dos anúncios)";
+  $("hist").innerHTML=cnt.map(function(c,i){
+    var a=lo+i*w, b=a+w;
+    var lab = i===0 ? "até "+fmt(b) : (i===bins-1 ? fmt(a)+" ou mais" : fmt(a)+" – "+fmt(b));
+    return "<div class='bar-row'><div class='nm' title='"+lab+"'>"+lab+"</div>"+
+      "<div class='bar-track'><div class='bar-fill' style='width:"+(c/mx*100).toFixed(1)+"%'></div></div>"+
+      "<div class='vl'>"+fmtInt(c)+"</div></div>";
+  }).join("");
+}
+
+/* ---- por tipo ---- */
+function renderByType(all){
+  var g=groupAgg(all,"rt").sort(function(a,b){return b.mean-a.mean;});
+  if(!g.length){ $("byType").innerHTML="<div style='color:var(--muted)'>Sem dados.</div>"; return; }
+  var mx=Math.max.apply(null,g.map(function(x){return x.mean;}));
+  $("byType").innerHTML=g.map(function(x){
+    return "<div class='bar-row'><div class='nm' title='"+esc(x.key)+"'>"+esc(x.key)+"</div>"+
+      "<div class='bar-track'><div class='bar-fill' style='width:"+(x.mean/mx*100).toFixed(1)+"%'></div></div>"+
+      "<div class='vl'>"+fmt(x.mean)+"</div></div>"+
+      "<div style='font-size:11px;color:var(--muted);margin:-3px 0 7px 158px'>"+fmtInt(x.n)+" anúncios · mediana "+fmt(x.med)+"</div>";
+  }).join("");
+}
+
+/* ---- comparativo lado a lado ---- */
+function renderCompare(groups){
+  if(groups.length<1){ $("cmpTable").innerHTML="<div style='color:var(--muted)'>Selecione ao menos uma cidade.</div>"; $("cmpType").innerHTML=""; return; }
+  var st=groups.map(function(g){ return {name:g.city.name, cur:g.city.currency, s:stats(g.rows)}; });
+  var metrics=[
+    ["Anúncios", function(s){return fmtInt(s.n);}, function(s){return s.n;}],
+    ["Preço médio", function(s){return fmt(s.mean);}, function(s){return s.mean;}],
+    ["Mediana", function(s){return fmt(s.med);}, function(s){return s.med;}],
+    ["P25 (25% mais baratos até)", function(s){return fmt(s.p25);}, function(s){return s.p25;}],
+    ["P75 (25% mais caros a partir de)", function(s){return fmt(s.p75);}, function(s){return s.p75;}],
+    ["Mínimo", function(s){return fmt(s.min);}, function(s){return s.min;}],
+    ["Máximo", function(s){return fmt(s.max);}, function(s){return s.max;}],
+    ["Desvio padrão", function(s){return fmt(s.sd);}, function(s){return s.sd;}],
+    ["Mín. de noites (média)", function(s){return fmtDec(s.mn);}, function(s){return s.mn;}],
+    ["Disponibilidade (dias/ano)", function(s){return fmtDec(s.av,0);}, function(s){return s.av;}],
+    ["Avaliações por anúncio", function(s){return fmtDec(s.nr,1);}, function(s){return s.nr;}],
+    ["% imóveis inteiros", function(s){return fmtDec(s.entire,1)+"%";}, function(s){return s.entire;}, "pp"]
+  ];
+  var showDiff = st.length===2;
+  var h="<table><thead><tr><th>Indicador</th>"+
+    st.map(function(x){ return "<th>"+esc(x.name)+"<div style='font-weight:400;font-size:11px'>origem: "+(x.cur==="BRL"?"R$":"US$")+"</div></th>"; }).join("")+
+    (showDiff?"<th>Diferença</th>":"")+"</tr></thead><tbody>";
+  metrics.forEach(function(m){
+    h+="<tr><td>"+m[0]+"</td>"+st.map(function(x){return "<td>"+m[1](x.s)+"</td>";}).join("");
+    if(showDiff){
+      var a=m[2](st[0].s), b=m[2](st[1].s), pp=(m[3]==="pp");
+      var d = pp ? (b-a) : ((isFinite(a)&&isFinite(b)&&a!==0)?((b-a)/Math.abs(a)*100):NaN);
+      h+="<td class='"+(d>0?"pos":"neg")+"'>"+(isFinite(d)?(d>0?"+":"")+fmtDec(d,1)+(pp?" p.p.":"%"):"—")+"</td>";
+    }
+    h+="</tr>";
+  });
+  h+="</tbody></table>";
+  if(showDiff) h+="<div style='color:var(--muted);font-size:12px;margin-top:8px'>A coluna <b>Diferença</b> mostra quanto <b>"+esc(st[1].name)+"</b> está acima (+) ou abaixo (−) de <b>"+esc(st[0].name)+"</b>.</div>";
+  $("cmpTable").innerHTML=h;
+
+  /* por tipo, por cidade */
+  var types={}; groups.forEach(function(g){ g.rows.forEach(function(x){ types[x.r.rt]=1; }); });
+  var tl=Object.keys(types).sort();
+  var t="<table><thead><tr><th>Tipo de imóvel</th>"+groups.map(function(g){return "<th>"+esc(g.city.name)+"</th>";}).join("")+"</tr></thead><tbody>";
+  tl.forEach(function(k){
+    t+="<tr><td>"+esc(k)+"</td>"+groups.map(function(g){
+      var sub=g.rows.filter(function(x){return x.r.rt===k;});
+      if(!sub.length) return "<td>—</td>";
+      var s=stats(sub);
+      return "<td>"+fmt(s.mean)+"<div style='font-size:11px;color:var(--muted)'>"+fmtInt(s.n)+" anúncios</div></td>";
+    }).join("")+"</tr>";
+  });
+  $("cmpType").innerHTML=t+"</tbody></table>";
+}
+
+/* ---- bairros ---- */
+function renderNeighbourhoods(all,groups){
+  var multi=groups.length>1;
+  var m={};
+  all.forEach(function(x){
+    var k=(multi? x.city.name+" — ":"")+x.r.nb;
+    (m[k]=m[k]||[]).push(x);
+  });
+  var rows=Object.keys(m).map(function(k){ var s=stats(m[k]); return {k:k,s:s}; })
+    .filter(function(x){return x.s.n>=5;})
+    .sort(function(a,b){return b.s.mean-a.s.mean;});
+  if(!rows.length){ $("nbTable").innerHTML="<div style='color:var(--muted)'>Sem bairros com pelo menos 5 anúncios nos filtros atuais.</div>"; return; }
+  var h="<table><thead><tr><th>Bairro</th><th>Anúncios</th><th>Preço médio</th><th>Mediana</th><th>P25</th><th>P75</th><th>Mín.</th><th>Máx.</th><th>Disp. (dias)</th></tr></thead><tbody>";
+  rows.forEach(function(x){
+    h+="<tr><td>"+esc(x.k)+"</td><td>"+fmtInt(x.s.n)+"</td><td><b>"+fmt(x.s.mean)+"</b></td><td>"+fmt(x.s.med)+
+       "</td><td>"+fmt(x.s.p25)+"</td><td>"+fmt(x.s.p75)+"</td><td>"+fmt(x.s.min)+"</td><td>"+fmt(x.s.max)+
+       "</td><td>"+fmtDec(x.s.av,0)+"</td></tr>";
+  });
+  $("nbTable").innerHTML=h+"</tbody></table>";
+}
+
+/* =========================================================================
+   8. MAPA
+   ========================================================================= */
+var mapDirty=true, MAPDATA=[];
+function mapReady(){ return typeof L!=="undefined" && !!L.map; }
+function ensureMap(){
+  if(map) return;
+  if(!mapReady()) return;
+  map=L.map("map",{preferCanvas:true}).setView([-22.95,-43.2],11);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
+    maxZoom:19, attribution:'&copy; OpenStreetMap'
+  }).addTo(map);
+  map.createPane("gridPane"); map.getPane("gridPane").style.zIndex=402;
+  map.createPane("heatPane"); map.getPane("heatPane").style.zIndex=404;
+  map.createPane("ptsPane");  map.getPane("ptsPane").style.zIndex=406;
+  map.on("moveend zoomend", function(){ if($("lyPts").checked) drawPoints(); });
+}
+function renderMap(all){
+  if(!mapReady()){
+    $("map").innerHTML="<div style='padding:40px;text-align:center;color:var(--muted)'>"+
+      "<b style='display:block;color:var(--text);margin-bottom:6px'>Mapa indisponível no momento</b>"+
+      "O mapa precisa de conexão com a internet para carregar a base cartográfica.<br>"+
+      "Conecte-se à internet e atualize a página (F5). Todo o restante do painel funciona normalmente.</div>";
+    $("mapNote").textContent=""; return;
+  }
+  ensureMap(); MAPDATA=all; mapDirty=false;
+  var sel=$("mapCity"), prev=sel.value, names={};
+  MAPDATA.forEach(function(x){ names[x.city.id]=x.city.name; });
+  var ids=Object.keys(names);
+  sel.innerHTML=ids.map(function(id){ return "<option value='"+esc(id)+"'>"+esc(names[id])+"</option>"; }).join("");
+  sel.value = ids.indexOf(prev)>=0 ? prev : (ids[0]||"");
+  if(!all.length){ clearLayers(); $("mapNote").textContent="Sem dados com os filtros atuais."; $("legend").innerHTML=""; return; }
+  focusCity(sel.value);
+  drawGrid(); drawHeat(); drawPoints();
+  setTimeout(function(){ map.invalidateSize(); drawPoints(); },120);
+}
+function focusCity(cid){
+  if(!mapReady()||!map||!MAPDATA.length) return;
+  var arr=MAPDATA.filter(function(x){return x.city.id===cid;});
+  if(!arr.length) arr=MAPDATA;
+  var las=arr.map(function(x){return x.r.la;}).sort(function(a,b){return a-b;});
+  var los=arr.map(function(x){return x.r.lo;}).sort(function(a,b){return a-b;});
+  map.fitBounds([[quantile(las,.01),quantile(los,.01)],[quantile(las,.99),quantile(los,.99)]],{padding:[20,20]});
+}
+function clearLayers(){
+  [gridLayer,heatLayer,ptsLayer].forEach(function(l){ if(l&&map.hasLayer(l)) map.removeLayer(l); });
+  gridLayer=heatLayer=ptsLayer=null;
+}
+/* malha automática: divide a área em células e colore pelo preço médio */
+function drawGrid(){
+  if(!mapReady()||!map) return;
+  if(gridLayer){ map.removeLayer(gridLayer); gridLayer=null; }
+  $("legend").innerHTML="";
+  if(!$("lyGrid").checked || !MAPDATA.length) return;
+  var res=parseInt($("gridRes").value,10);
+
+  /* a malha é calculada separadamente para cada cidade,
+     para que a área de uma cidade não interfira na da outra */
+  var byCity={};
+  MAPDATA.forEach(function(x){ (byCity[x.city.id]=byCity[x.city.id]||[]).push(x); });
+
+  var all=[];
+  Object.keys(byCity).forEach(function(cid){
+    var arr=byCity[cid];
+    var minLa=Infinity,maxLa=-Infinity,minLo=Infinity,maxLo=-Infinity;
+    arr.forEach(function(x){ var r=x.r;
+      if(r.la<minLa)minLa=r.la; if(r.la>maxLa)maxLa=r.la;
+      if(r.lo<minLo)minLo=r.lo; if(r.lo>maxLo)maxLo=r.lo; });
+    /* ignora pontos muito distantes do centro (evita que 1 outlier estique a malha) */
+    var las=arr.map(function(x){return x.r.la;}).sort(function(a,b){return a-b;});
+    var los=arr.map(function(x){return x.r.lo;}).sort(function(a,b){return a-b;});
+    minLa=quantile(las,.005); maxLa=quantile(las,.995);
+    minLo=quantile(los,.005); maxLo=quantile(los,.995);
+    var wLo=(maxLo-minLo)/res || 0.002;
+    var midLa=(minLa+maxLa)/2;
+    var wLa=Math.abs(wLo*Math.cos(midLa*Math.PI/180)) || 0.002;
+    var cells={};
+    arr.forEach(function(x){
+      if(x.r.la<minLa||x.r.la>maxLa||x.r.lo<minLo||x.r.lo>maxLo) return;
+      var gx=Math.floor((x.r.lo-minLo)/wLo), gy=Math.floor((x.r.la-minLa)/wLa), k=gx+"|"+gy;
+      var c=cells[k]||(cells[k]={gx:gx,gy:gy,s:0,n:0});
+      c.s+=x.dp; c.n++;
+    });
+    Object.keys(cells).forEach(function(k){
+      var c=cells[k]; if(c.n<3) return;
+      all.push({mean:c.s/c.n, n:c.n, name:arr[0].city.name,
+        b:[[minLa+c.gy*wLa, minLo+c.gx*wLo],[minLa+(c.gy+1)*wLa, minLo+(c.gx+1)*wLo]]});
+    });
+  });
+  if(!all.length) return;
+
+  /* escala de cores comum a todas as cidades → permite comparar */
+  var means=all.map(function(c){return c.mean;}).sort(function(a,b){return a-b;});
+  var breaks=[]; for(var i=1;i<6;i++) breaks.push(quantile(means,i/6));
+  legendBreaks=breaks;
+
+  var g=L.layerGroup();
+  all.forEach(function(c){
+    var ci=0; while(ci<breaks.length && c.mean>breaks[ci]) ci++;
+    var rect=L.rectangle(c.b,{pane:"gridPane",color:SCALE[ci],weight:0,fillColor:SCALE[ci],fillOpacity:.62,interactive:true});
+    rect.bindTooltip("<b>"+esc(c.name)+" · área do mapa</b><span class='p1'>"+fmt(c.mean)+"</span>"+
+      "<span class='p2'>preço médio de "+fmtInt(c.n)+" anúncios</span>",{className:"tt",sticky:true});
+    g.addLayer(rect);
+  });
+  gridLayer=g.addTo(map);
+
+  $("legend").innerHTML="<span>Preço médio por área:</span><span>até "+fmt(breaks[0])+"</span>"+
+    SCALE.map(function(col){ return "<i style='background:"+col+"'></i>"; }).join("")+
+    "<span>acima de "+fmt(breaks[4])+"</span>";
+}
+function drawHeat(){
+  if(!mapReady()||!map) return;
+  if(heatLayer){ map.removeLayer(heatLayer); heatLayer=null; }
+  if(!$("lyHeat").checked || !MAPDATA.length || !L.heatLayer) return;
+  var v=MAPDATA.map(function(x){return x.dp;}).sort(function(a,b){return a-b;});
+  var lo=quantile(v,.05), hi=quantile(v,.95)||1;
+  var step=Math.max(1,Math.floor(MAPDATA.length/20000)), pts=[];
+  for(var i=0;i<MAPDATA.length;i+=step){
+    var x=MAPDATA[i], w=(x.dp-lo)/(hi-lo); w=Math.max(.05,Math.min(1,w));
+    pts.push([x.r.la,x.r.lo,w]);
+  }
+  heatLayer=L.heatLayer(pts,{pane:"heatPane",radius:18,blur:22,maxZoom:15,minOpacity:.25}).addTo(map);
+}
+function drawPoints(){
+  if(!mapReady()||!map) return;
+  if(ptsLayer){ map.removeLayer(ptsLayer); ptsLayer=null; }
+  if(!$("lyPts").checked || !MAPDATA.length) return;
+  var b=map.getBounds(), vis=[];
+  for(var i=0;i<MAPDATA.length;i++){ var r=MAPDATA[i].r;
+    if(r.la>=b.getSouth()&&r.la<=b.getNorth()&&r.lo>=b.getWest()&&r.lo<=b.getEast()) vis.push(MAPDATA[i]); }
+  var MAXP=3500, step=Math.max(1,Math.ceil(vis.length/MAXP)), shown=[];
+  for(var j=0;j<vis.length;j+=step) shown.push(vis[j]);
+  var canvas=L.canvas({padding:.3,pane:"ptsPane"}), g=L.layerGroup(), o=otherCur();
+  var brand=getComputedStyle(document.documentElement).getPropertyValue("--brand").trim()||"#1f5480";
+  shown.forEach(function(x){
+    var m=L.circleMarker([x.r.la,x.r.lo],{pane:"ptsPane",renderer:canvas,radius:4,weight:1,
+      color:"#ffffff",fillColor:brand,fillOpacity:.9});
+    var orig = fmt(x.r.p, x.city.currency);
+    var alt  = fmt(convTo(x.r.p,x.city.currency,o), o);
+    m.bindTooltip("<b>"+esc(x.r.nm||"Anúncio")+"</b>"+
+      "<span class='p1'>"+fmt(x.dp)+"</span>"+
+      "<span class='p2'>"+alt+" · original: "+orig+"</span>"+
+      "<span class='p2'>"+esc(x.r.nb)+" · "+esc(x.r.rt)+"</span>"+
+      "<span class='p2'>mín. "+fmtInt(x.r.mn)+" noite(s) · "+fmtInt(x.r.nr)+" avaliações</span>",
+      {className:"tt",direction:"top",offset:[0,-4]});
+    g.addLayer(m);
+  });
+  ptsLayer=g.addTo(map);
+  $("mapNote").textContent="Exibindo "+fmtInt(shown.length)+" de "+fmtInt(MAPDATA.length)+
+    " anúncios como pontos (amostra para manter o mapa rápido — aproxime o zoom para ver mais). "+
+    "Passe o mouse por um ponto para ver o valor.";
+}
+
+/* =========================================================================
+   9. IMPORTAÇÃO
+   ========================================================================= */
+var pendingQueue=[];
+function slug(s){ return String(s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,""); }
+function guessName(fn){
+  var b=fn.replace(/\.[^.]+$/,"").replace(/\.csv$/i,"").replace(/[_-]+/g," ").trim();
+  var known={ny:"Nova York",nyc:"Nova York",rj:"Rio de Janeiro",sp:"São Paulo",bh:"Belo Horizonte",poa:"Porto Alegre",cwb:"Curitiba",ssa:"Salvador",bsb:"Brasília",rec:"Recife",for:"Fortaleza",flo:"Florianópolis"};
+  var k=slug(b).replace(/-/g,"");
+  if(known[k]) return known[k];
+  return b.charAt(0).toUpperCase()+b.slice(1);
+}
+function guessCur(name){ return /nova york|new york|nyc|miami|orlando|lisbo|paris|londres|usa|eua/i.test(name)?"USD":"BRL"; }
+
+$("importBtn").onclick=function(){ $("fileInp").value=""; $("fileInp").click(); };
+$("fileInp").onchange=function(e){
+  var files=Array.prototype.slice.call(e.target.files||[]);
+  if(!files.length) return;
+  pendingQueue=files; nextImport();
+};
+function nextImport(){
+  if(!pendingQueue.length){ $("ovImport").classList.remove("on"); return; }
+  var file=pendingQueue[0];
+  status("Lendo "+file.name+"…",0);
+  var rd=new FileReader();
+  rd.onload=function(){
+    hideStatus();
+    try{
+      var rows=buildRows(parseCSV(rd.result));
+      var nm=guessName(file.name);
+      $("impTitle").textContent="Importar cidade";
+      $("impDesc").innerHTML="Arquivo <b>"+esc(file.name)+"</b> · "+fmtInt(rows.length)+
+        " anúncios válidos. Confira o nome da cidade e a moeda dos preços.";
+      $("impName").value=nm; $("impCur").value=guessCur(nm);
+      $("ovImport").classList.add("on");
+      $("impOk").onclick=function(){
+        var name=$("impName").value.trim()||nm, cur=$("impCur").value, id=slug(name);
+        var existing=CITIES.filter(function(c){return c.id===id;})[0];
+        var obj={id:id,name:name,currency:cur,rows:rows,importedAt:Date.now()};
+        if(existing){ CITIES[CITIES.indexOf(existing)]=obj; } else { CITIES.push(obj); }
+        SEL[id]=true;
+        dbPut("cities",obj);
+        $("ovImport").classList.remove("on");
+        status((existing?"Cidade atualizada: ":"Cidade importada: ")+name+" ("+fmtInt(rows.length)+" anúncios)");
+        pendingQueue.shift(); render(); setTimeout(nextImport,300);
+      };
+      $("impCancel").onclick=function(){ $("ovImport").classList.remove("on"); pendingQueue.shift(); setTimeout(nextImport,150); };
+    }catch(err){
+      status("Não consegui ler "+file.name+": "+err.message, 5000);
+      pendingQueue.shift(); setTimeout(nextImport,300);
+    }
+  };
+  rd.onerror=function(){ status("Falha ao abrir "+file.name,4000); pendingQueue.shift(); setTimeout(nextImport,300); };
+  rd.readAsText(file,"utf-8");
+}
+
+/* remover cidade */
+function askRemove(c){
+  $("cfTitle").textContent="Remover "+c.name+"?";
+  $("cfDesc").textContent="Os dados desta cidade serão apagados deste navegador. O arquivo original não é afetado e você pode importá-lo novamente quando quiser.";
+  $("ovConfirm").classList.add("on");
+  $("cfYes").onclick=function(){
+    CITIES=CITIES.filter(function(x){return x.id!==c.id;}); delete SEL[c.id];
+    dbDel("cities",c.id); $("ovConfirm").classList.remove("on");
+    status("Cidade removida: "+c.name); render();
+  };
+  $("cfNo").onclick=function(){ $("ovConfirm").classList.remove("on"); };
+}
+
+/* =========================================================================
+   10. EVENTOS
+   ========================================================================= */
+document.querySelectorAll(".tab").forEach(function(t){
+  t.onclick=function(){
+    document.querySelectorAll(".tab").forEach(function(x){x.classList.remove("active");});
+    document.querySelectorAll(".panel").forEach(function(x){x.classList.remove("active");});
+    t.classList.add("active"); $("p-"+t.dataset.p).classList.add("active");
+    if(t.dataset.p==="map"){ if(mapDirty) renderMap(flatten(filteredByCity())); else setTimeout(function(){ map&&map.invalidateSize(); },60); }
+  };
+});
+["fNb","fRt","fPmin","fPmax","fMn","fAv","fNr"].forEach(function(id){
+  $(id).addEventListener("change",render);
+});
+$("clearBtn").onclick=function(){
+  ["fNb","fRt","fPmin","fPmax","fMn","fAv","fNr"].forEach(function(id){ $(id).value=""; });
+  render();
+};
+$("curSel").onchange=function(){ DISPLAY=this.value; dbPut("prefs",{k:"display",v:DISPLAY}); render(); };
+$("rateInp").onchange=function(){
+  var v=parseFloat(this.value); if(isFinite(v)&&v>0){ RATE=v; dbPut("prefs",{k:"rate",v:RATE}); render(); }
+};
+$("lyGrid").onchange=function(){ drawGrid(); };
+$("lyHeat").onchange=function(){ drawHeat(); };
+$("lyPts").onchange=function(){ drawPoints(); };
+$("gridRes").onchange=function(){ drawGrid(); };
+$("mapCity").onchange=function(){ focusCity(this.value); setTimeout(drawPoints,400); };
+
+/* =========================================================================
+   11. INÍCIO
+   ========================================================================= */
+(function init(){
+  openDB().then(function(){
+    return Promise.all([dbAll("cities"),dbAll("prefs")]);
+  }).then(function(res){
+    var cities=res[0]||[], prefs=res[1]||[];
+    prefs.forEach(function(p){
+      if(p.k==="display"){ DISPLAY=p.v; $("curSel").value=p.v; }
+      if(p.k==="rate"){ RATE=p.v; $("rateInp").value=p.v; }
+    });
+    CITIES=cities.sort(function(a,b){return a.name.localeCompare(b.name);});
+    CITIES.forEach(function(c){ SEL[c.id]=true; });
+    if(CITIES.length) status("Dados carregados deste navegador: "+CITIES.map(function(c){return c.name;}).join(", "));
+    render();
+  }).catch(function(e){ console.warn(e); render(); });
+})();
+</script>
+</body>
+</html>
